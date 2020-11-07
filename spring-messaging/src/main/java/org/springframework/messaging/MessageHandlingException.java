@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,13 +22,19 @@ package org.springframework.messaging;
  * @author Mark Fisher
  * @since 4.0
  */
+@SuppressWarnings("serial")
 public class MessageHandlingException extends MessagingException {
 
-	private static final long serialVersionUID = 690969923668400297L;
-
+	public MessageHandlingException(Message<?> failedMessage) {
+		super(failedMessage);
+	}
 
 	public MessageHandlingException(Message<?> message, String description) {
 		super(message, description);
+	}
+
+	public MessageHandlingException(Message<?> failedMessage, Throwable cause) {
+		super(failedMessage, cause);
 	}
 
 	public MessageHandlingException(Message<?> message, String description, Throwable cause) {

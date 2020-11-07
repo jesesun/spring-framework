@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -42,7 +42,7 @@ public class TestWebSocketSession implements WebSocketSession {
 
 	private URI uri;
 
-	private Map<String, Object> attributes = new HashMap<String, Object>();
+	private Map<String, Object> attributes = new HashMap<>();
 
 	private Principal principal;
 
@@ -52,7 +52,7 @@ public class TestWebSocketSession implements WebSocketSession {
 
 	private String protocol;
 
-	private List<WebSocketExtension> extensions = new ArrayList<WebSocketExtension>();
+	private List<WebSocketExtension> extensions = new ArrayList<>();
 
 	private boolean open;
 
@@ -62,6 +62,12 @@ public class TestWebSocketSession implements WebSocketSession {
 
 	private HttpHeaders headers;
 
+	public TestWebSocketSession() {
+	}
+
+	public TestWebSocketSession(String id) {
+		this.id = id;
+	}
 
 	@Override
 	public String getId() {
@@ -95,12 +101,12 @@ public class TestWebSocketSession implements WebSocketSession {
 		this.headers = headers;
 	}
 
-	public void setHandshakeAttributes(Map<String, Object> attributes) {
+	public void setAttributes(Map<String, Object> attributes) {
 		this.attributes = attributes;
 	}
 
 	@Override
-	public Map<String, Object> getHandshakeAttributes() {
+	public Map<String, Object> getAttributes() {
 		return this.attributes;
 	}
 
@@ -131,12 +137,31 @@ public class TestWebSocketSession implements WebSocketSession {
 		this.remoteAddress = remoteAddress;
 	}
 
+	@Override
 	public String getAcceptedProtocol() {
 		return this.protocol;
 	}
 
 	public void setAcceptedProtocol(String protocol) {
 		this.protocol = protocol;
+	}
+
+	@Override
+	public void setTextMessageSizeLimit(int messageSizeLimit) {
+	}
+
+	@Override
+	public int getTextMessageSizeLimit() {
+		return 0;
+	}
+
+	@Override
+	public void setBinaryMessageSizeLimit(int messageSizeLimit) {
+	}
+
+	@Override
+	public int getBinaryMessageSizeLimit() {
+		return 0;
 	}
 
 	@Override

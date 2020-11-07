@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.security.Principal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -30,14 +31,16 @@ import javax.websocket.Extension;
 import javax.websocket.Session;
 
 import org.springframework.http.HttpHeaders;
-import org.springframework.util.StringUtils;
+import org.springframework.lang.Nullable;
+import org.springframework.util.Assert;
+import org.springframework.util.CollectionUtils;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.PingMessage;
 import org.springframework.web.socket.PongMessage;
 import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.WebSocketExtension;
+import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.adapter.AbstractWebSocketSession;
 
 /**
@@ -48,42 +51,76 @@ import org.springframework.web.socket.adapter.AbstractWebSocketSession;
  */
 public class StandardWebSocketSession extends AbstractWebSocketSession<Session> {
 
+	private final String id;
+
+	@Nullable
+	private URI uri;
+
 	private final HttpHeaders handshakeHeaders;
 
+	@Nullable
+	private String acceptedProtocol;
+
+	@Nullable
+	private List<WebSocketExtension> extensions;
+
+	@Nullable
+	private Principal user;
+
+	@Nullable
 	private final InetSocketAddress localAddress;
 
+	@Nullable
 	private final InetSocketAddress remoteAddress;
-
-	private List<WebSocketExtension> extensions;
 
 
 	/**
-	 * Class constructor.
+	 * Constructor for a standard WebSocket session.
 	 * @param headers the headers of the handshake request
-	 * @param handshakeAttributes attributes from the HTTP handshake to make available
-	 * through the WebSocket session
+	 * @param attributes the attributes from the HTTP handshake to associate with the WebSocket
+	 * session; the provided attributes are copied, the original map is not used.
 	 * @param localAddress the address on which the request was received
 	 * @param remoteAddress the address of the remote client
 	 */
-	public StandardWebSocketSession(HttpHeaders headers, Map<String, Object> handshakeAttributes,
-			InetSocketAddress localAddress, InetSocketAddress remoteAddress) {
-		super(handshakeAttributes);
-		headers = (headers != null) ? headers : new HttpHeaders();
+	public StandardWebSocketSession(@Nullable HttpHeaders headers, @Nullable Map<String, Object> attributes,
+			@Nullable InetSocketAddress localAddress, @Nullable InetSocketAddress remoteAddress) {
+
+		this(headers, attributes, localAddress, remoteAddress, null);
+	}
+
+	/**
+	 * Constructor that associates a user with the WebSocket session.
+	 * @param headers the headers of the handshake request
+	 * @param attributes the attributes from the HTTP handshake to associate with the WebSocket session
+	 * @param localAddress the address on which the request was received
+	 * @param remoteAddress the address of the remote client
+	 * @param user the user associated with the session; if {@code null} we'll
+	 * fallback on the user available in the underlying WebSocket session
+	 */
+	public StandardWebSocketSession(@Nullable HttpHeaders headers, @Nullable Map<String, Object> attributes,
+			@Nullable InetSocketAddress localAddress, @Nullable InetSocketAddress remoteAddress,
+			@Nullable Principal user) {
+
+		super(attributes);
+		this.id = idGenerator.generateId().toString();
+		headers = (headers != null ? headers : new HttpHeaders());
 		this.handshakeHeaders = HttpHeaders.readOnlyHttpHeaders(headers);
+		this.user = user;
 		this.localAddress = localAddress;
 		this.remoteAddress = remoteAddress;
 	}
 
+
 	@Override
 	public String getId() {
-		checkNativeSessionInitialized();
-		return getNativeSession().getId();
+		return this.id;
 	}
 
 	@Override
+	@Nullable
 	public URI getUri() {
 		checkNativeSessionInitialized();
-		return getNativeSession().getRequestURI();
+		return this.uri;
 	}
 
 	@Override
@@ -92,44 +129,85 @@ public class StandardWebSocketSession extends AbstractWebSocketSession<Session> 
 	}
 
 	@Override
-	public Principal getPrincipal() {
+	public String getAcceptedProtocol() {
 		checkNativeSessionInitialized();
-		return getNativeSession().getUserPrincipal();
+		return this.acceptedProtocol;
 	}
 
 	@Override
+	public List<WebSocketExtension> getExtensions() {
+		Assert.state(this.extensions != null, "WebSocket session is not yet initialized");
+		return this.extensions;
+	}
+
+	@Override
+	public Principal getPrincipal() {
+		return this.user;
+	}
+
+	@Override
+	@Nullable
 	public InetSocketAddress getLocalAddress() {
 		return this.localAddress;
 	}
 
 	@Override
+	@Nullable
 	public InetSocketAddress getRemoteAddress() {
 		return this.remoteAddress;
 	}
 
 	@Override
-	public String getAcceptedProtocol() {
+	public void setTextMessageSizeLimit(int messageSizeLimit) {
 		checkNativeSessionInitialized();
-		String protocol = getNativeSession().getNegotiatedSubprotocol();
-		return StringUtils.isEmpty(protocol)? null : protocol;
+		getNativeSession().setMaxTextMessageBufferSize(messageSizeLimit);
 	}
 
 	@Override
-	public List<WebSocketExtension> getExtensions() {
+	public int getTextMessageSizeLimit() {
 		checkNativeSessionInitialized();
-		if(this.extensions == null) {
-			List<Extension> source = getNativeSession().getNegotiatedExtensions();
-			this.extensions = new ArrayList<WebSocketExtension>(source.size());
-			for(Extension e : source) {
-				this.extensions.add(new StandardToWebSocketExtensionAdapter(e));
-			}
-		}
-		return this.extensions;
+		return getNativeSession().getMaxTextMessageBufferSize();
+	}
+
+	@Override
+	public void setBinaryMessageSizeLimit(int messageSizeLimit) {
+		checkNativeSessionInitialized();
+		getNativeSession().setMaxBinaryMessageBufferSize(messageSizeLimit);
+	}
+
+	@Override
+	public int getBinaryMessageSizeLimit() {
+		checkNativeSessionInitialized();
+		return getNativeSession().getMaxBinaryMessageBufferSize();
 	}
 
 	@Override
 	public boolean isOpen() {
-		return (getNativeSession() != null && getNativeSession().isOpen());
+		return getNativeSession().isOpen();
+	}
+
+	@Override
+	public void initializeNativeSession(Session session) {
+		super.initializeNativeSession(session);
+
+		this.uri = session.getRequestURI();
+		this.acceptedProtocol = session.getNegotiatedSubprotocol();
+
+		List<Extension> standardExtensions = getNativeSession().getNegotiatedExtensions();
+		if (!CollectionUtils.isEmpty(standardExtensions)) {
+			this.extensions = new ArrayList<>(standardExtensions.size());
+			for (Extension standardExtension : standardExtensions) {
+				this.extensions.add(new StandardToWebSocketExtensionAdapter(standardExtension));
+			}
+			this.extensions = Collections.unmodifiableList(this.extensions);
+		}
+		else {
+			this.extensions = Collections.emptyList();
+		}
+
+		if (this.user == null) {
+			this.user = session.getUserPrincipal();
+		}
 	}
 
 	@Override

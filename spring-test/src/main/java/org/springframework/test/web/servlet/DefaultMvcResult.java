@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,15 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.test.web.servlet;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
-import javax.servlet.http.HttpServletRequest;
-
+import org.springframework.lang.Nullable;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.util.Assert;
 import org.springframework.web.servlet.FlashMap;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.ModelAndView;
@@ -36,21 +38,29 @@ import org.springframework.web.servlet.support.RequestContextUtils;
  */
 class DefaultMvcResult implements MvcResult {
 
+	private static final Object RESULT_NONE = new Object();
+
+
 	private final MockHttpServletRequest mockRequest;
 
 	private final MockHttpServletResponse mockResponse;
 
+	@Nullable
 	private Object handler;
 
+	@Nullable
 	private HandlerInterceptor[] interceptors;
 
+	@Nullable
 	private ModelAndView modelAndView;
 
+	@Nullable
 	private Exception resolvedException;
 
-	private Object asyncResult;
+	private final AtomicReference<Object> asyncResult = new AtomicReference<>(RESULT_NONE);
 
-	private CountDownLatch asyncResultLatch;
+	@Nullable
+	private CountDownLatch asyncDispatchLatch;
 
 
 	/**
@@ -61,37 +71,35 @@ class DefaultMvcResult implements MvcResult {
 		this.mockResponse = response;
 	}
 
-	@Override
-	public MockHttpServletResponse getResponse() {
-		return mockResponse;
-	}
 
 	@Override
 	public MockHttpServletRequest getRequest() {
-		return mockRequest;
+		return this.mockRequest;
 	}
 
 	@Override
-	public Object getHandler() {
-		return this.handler;
+	public MockHttpServletResponse getResponse() {
+		return this.mockResponse;
 	}
 
-	public void setHandler(Object handler) {
+	public void setHandler(@Nullable Object handler) {
 		this.handler = handler;
 	}
 
 	@Override
-	public HandlerInterceptor[] getInterceptors() {
-		return this.interceptors;
+	@Nullable
+	public Object getHandler() {
+		return this.handler;
 	}
 
-	public void setInterceptors(HandlerInterceptor[] interceptors) {
+	public void setInterceptors(@Nullable HandlerInterceptor... interceptors) {
 		this.interceptors = interceptors;
 	}
 
 	@Override
-	public Exception getResolvedException() {
-		return this.resolvedException;
+	@Nullable
+	public HandlerInterceptor[] getInterceptors() {
+		return this.interceptors;
 	}
 
 	public void setResolvedException(Exception resolvedException) {
@@ -99,21 +107,28 @@ class DefaultMvcResult implements MvcResult {
 	}
 
 	@Override
-	public ModelAndView getModelAndView() {
-		return this.modelAndView;
+	@Nullable
+	public Exception getResolvedException() {
+		return this.resolvedException;
 	}
 
-	public void setModelAndView(ModelAndView mav) {
+	public void setModelAndView(@Nullable ModelAndView mav) {
 		this.modelAndView = mav;
 	}
 
 	@Override
+	@Nullable
+	public ModelAndView getModelAndView() {
+		return this.modelAndView;
+	}
+
+	@Override
 	public FlashMap getFlashMap() {
-		return RequestContextUtils.getOutputFlashMap(mockRequest);
+		return RequestContextUtils.getOutputFlashMap(this.mockRequest);
 	}
 
 	public void setAsyncResult(Object asyncResult) {
-		this.asyncResult = asyncResult;
+		this.asyncResult.set(asyncResult);
 	}
 
 	@Override
@@ -122,35 +137,36 @@ class DefaultMvcResult implements MvcResult {
 	}
 
 	@Override
-	public Object getAsyncResult(long timeout) {
-		// MockHttpServletRequest type doesn't have async methods
-		HttpServletRequest request = this.mockRequest;
-		if ((timeout != 0) && request.isAsyncStarted()) {
-			if (timeout == -1) {
-				timeout = request.getAsyncContext().getTimeout();
-			}
-			if (!awaitAsyncResult(timeout)) {
-				throw new IllegalStateException(
-						"Gave up waiting on async result from handler [" + this.handler + "] to complete");
-			}
+	public Object getAsyncResult(long timeToWait) {
+		if (this.mockRequest.getAsyncContext() != null && timeToWait == -1) {
+			long requestTimeout = this.mockRequest.getAsyncContext().getTimeout();
+			timeToWait = requestTimeout == -1 ? Long.MAX_VALUE : requestTimeout;
 		}
-		return this.asyncResult;
+		if (!awaitAsyncDispatch(timeToWait)) {
+			throw new IllegalStateException("Async result for handler [" + this.handler + "]" +
+					" was not set during the specified timeToWait=" + timeToWait);
+		}
+		Object result = this.asyncResult.get();
+		Assert.state(result != RESULT_NONE, () -> "Async result for handler [" + this.handler + "] was not set");
+		return this.asyncResult.get();
 	}
 
-	private boolean awaitAsyncResult(long timeout) {
-		if (this.asyncResultLatch != null) {
-			try {
-				return this.asyncResultLatch.await(timeout, TimeUnit.MILLISECONDS);
-			}
-			catch (InterruptedException e) {
-				return false;
-			}
+	/**
+	 * True if the latch count reached 0 within the specified timeout.
+	 */
+	private boolean awaitAsyncDispatch(long timeout) {
+		Assert.state(this.asyncDispatchLatch != null,
+				"The asyncDispatch CountDownLatch was not set by the TestDispatcherServlet.");
+		try {
+			return this.asyncDispatchLatch.await(timeout, TimeUnit.MILLISECONDS);
 		}
-		return true;
+		catch (InterruptedException ex) {
+			return false;
+		}
 	}
 
-	public void setAsyncResultLatch(CountDownLatch asyncResultLatch) {
-		this.asyncResultLatch = asyncResultLatch;
+	void setAsyncDispatchLatch(CountDownLatch asyncDispatchLatch) {
+		this.asyncDispatchLatch = asyncDispatchLatch;
 	}
 
 }

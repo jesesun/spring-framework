@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,36 +16,36 @@
 
 package org.springframework.messaging.simp.user;
 
+import org.springframework.lang.Nullable;
 import org.springframework.messaging.Message;
 
-import java.util.Set;
-
 /**
- * A strategy for resolving unique, user destinations per session. User destinations
- * provide a user with the ability to subscribe to a queue unique to their session
- * as well others with the ability to send messages to those queues.
+ * A strategy for resolving a "user" destination by translating it to one or more
+ * actual destinations one per active user session. When sending a message to a
+ * user destination, the destination must contain the user name so it may be
+ * extracted and used to look up the user sessions. When subscribing to a user
+ * destination, the destination does not have to contain the user's own name.
+ * We simply use the current session.
  *
- * <p>For example when a user attempts to subscribe to "/user/queue/position-updates",
- * the destination may be resolved to "/queue/position-updates-useri9oqdfzo" yielding a
- * unique queue name that does not collide with any other user attempting to do the same.
- * Subsequently when messages are sent to "/user/{username}/queue/position-updates",
- * the destination is translated to "/queue/position-updates-useri9oqdfzo".
+ * <p>See implementation classes and the documentation for example destinations.
  *
  * @author Rossen Stoyanchev
  * @since 4.0
  *
+ * @see org.springframework.messaging.simp.user.DefaultUserDestinationResolver
  * @see UserDestinationMessageHandler
  */
+@FunctionalInterface
 public interface UserDestinationResolver {
 
 	/**
-	 * Resolve the destination of the message to one or more user/session-specific target
-	 * destinations. If the user has multiple sessions, the method may return more than
-	 * one target destinations.
-	 * @param message the message to resolve
-	 * @return the resolved unique user destinations or an empty Set if the message
-	 * destination is not recognized as a user destination
+	 * Resolve the given message with a user destination to one or more messages
+	 * with actual destinations, one for each active user session.
+	 * @param message the message to try to resolve
+	 * @return 0 or more target messages (one for each active session), or
+	 * {@code null} if the source message does not contain a user destination.
 	 */
-	Set<String> resolveDestination(Message<?> message);
+	@Nullable
+	UserDestinationResult resolveDestination(Message<?> message);
 
 }

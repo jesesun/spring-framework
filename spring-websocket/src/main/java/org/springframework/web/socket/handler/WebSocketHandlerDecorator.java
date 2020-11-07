@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,6 +23,13 @@ import org.springframework.web.socket.WebSocketMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 /**
+ * Wraps another {@link org.springframework.web.socket.WebSocketHandler}
+ * instance and delegates to it.
+ *
+ * <p>Also provides a {@link #getDelegate()} method to return the decorated
+ * handler as well as a {@link #getLastHandler()} method to go through all nested
+ * delegates and return the "last" handler.
+ *
  * @author Rossen Stoyanchev
  * @since 4.0
  */
@@ -47,6 +54,15 @@ public class WebSocketHandlerDecorator implements WebSocketHandler {
 			result = ((WebSocketHandlerDecorator) result).getDelegate();
 		}
 		return result;
+	}
+
+	public static WebSocketHandler unwrap(WebSocketHandler handler) {
+		if (handler instanceof WebSocketHandlerDecorator) {
+			return ((WebSocketHandlerDecorator) handler).getLastHandler();
+		}
+		else {
+			return handler;
+		}
 	}
 
 	@Override

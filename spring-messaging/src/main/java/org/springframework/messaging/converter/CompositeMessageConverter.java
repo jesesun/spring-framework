@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original  author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,73 +20,40 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import org.springframework.lang.Nullable;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageHeaders;
 import org.springframework.util.Assert;
 
 /**
- * A {@link MessageConverter} that delegates to a list of other converters to invoke until
- * one of them returns a non-null value.
+ * A {@link MessageConverter} that delegates to a list of registered converters
+ * to be invoked until one of them returns a non-null result.
+ *
+ * <p>As of 4.2.1, this composite converter implements {@link SmartMessageConverter}
+ * in order to support the delegation of conversion hints.
  *
  * @author Rossen Stoyanchev
+ * @author Juergen Hoeller
  * @since 4.0
  */
-public class CompositeMessageConverter implements MessageConverter {
+public class CompositeMessageConverter implements SmartMessageConverter {
 
 	private final List<MessageConverter> converters;
 
-	private ContentTypeResolver contentTypeResolver;
-
 
 	/**
-	 * Create a new instance with the given {@link MessageConverter}s in turn configuring
-	 * each with a {@link DefaultContentTypeResolver}.
+	 * Create an instance with the given converters.
 	 */
 	public CompositeMessageConverter(Collection<MessageConverter> converters) {
-		this(new ArrayList<MessageConverter>(converters), new DefaultContentTypeResolver());
-	}
-
-	/**
-	 * Create an instance with the given {@link MessageConverter}s and configure all with
-	 * the given {@link ContentTypeResolver}.
-	 */
-	public CompositeMessageConverter(Collection<MessageConverter> converters, ContentTypeResolver resolver) {
-		Assert.notEmpty(converters, "Converters must not be null");
-		Assert.notNull(resolver, "ContentTypeResolver must not be null");
-		this.converters = new ArrayList<MessageConverter>(converters);
-		this.contentTypeResolver = resolver;
-		applyContentTypeResolver(converters, resolver);
-	}
-
-
-	private static void applyContentTypeResolver(Collection<MessageConverter> converters,
-			ContentTypeResolver resolver) {
-
-		for (MessageConverter converter : converters) {
-			if (converter instanceof AbstractMessageConverter) {
-				((AbstractMessageConverter) converter).setContentTypeResolver(resolver);
-			}
-		}
-	}
-
-
-	public void setContentTypeResolver(ContentTypeResolver resolver) {
-		this.contentTypeResolver = resolver;
-		applyContentTypeResolver(getConverters(), resolver);
-	}
-
-	public ContentTypeResolver getContentTypeResolver() {
-		return this.contentTypeResolver;
-	}
-
-	public Collection<MessageConverter> getConverters() {
-		return this.converters;
+		Assert.notEmpty(converters, "Converters must not be empty");
+		this.converters = new ArrayList<>(converters);
 	}
 
 
 	@Override
+	@Nullable
 	public Object fromMessage(Message<?> message, Class<?> targetClass) {
-		for (MessageConverter converter : this.converters) {
+		for (MessageConverter converter : getConverters()) {
 			Object result = converter.fromMessage(message, targetClass);
 			if (result != null) {
 				return result;
@@ -96,14 +63,56 @@ public class CompositeMessageConverter implements MessageConverter {
 	}
 
 	@Override
-	public Message<?> toMessage(Object payload, MessageHeaders headers) {
-		for (MessageConverter converter : this.converters) {
+	@Nullable
+	public Object fromMessage(Message<?> message, Class<?> targetClass, @Nullable Object conversionHint) {
+		for (MessageConverter converter : getConverters()) {
+			Object result = (converter instanceof SmartMessageConverter ?
+					((SmartMessageConverter) converter).fromMessage(message, targetClass, conversionHint) :
+					converter.fromMessage(message, targetClass));
+			if (result != null) {
+				return result;
+			}
+		}
+		return null;
+	}
+
+	@Override
+	@Nullable
+	public Message<?> toMessage(Object payload, @Nullable MessageHeaders headers) {
+		for (MessageConverter converter : getConverters()) {
 			Message<?> result = converter.toMessage(payload, headers);
 			if (result != null) {
 				return result;
 			}
 		}
 		return null;
+	}
+
+	@Override
+	@Nullable
+	public Message<?> toMessage(Object payload, @Nullable MessageHeaders headers, @Nullable Object conversionHint) {
+		for (MessageConverter converter : getConverters()) {
+			Message<?> result = (converter instanceof SmartMessageConverter ?
+					((SmartMessageConverter) converter).toMessage(payload, headers, conversionHint) :
+					converter.toMessage(payload, headers));
+			if (result != null) {
+				return result;
+			}
+		}
+		return null;
+	}
+
+
+	/**
+	 * Return the underlying list of delegate converters.
+	 */
+	public List<MessageConverter> getConverters() {
+		return this.converters;
+	}
+
+	@Override
+	public String toString() {
+		return "CompositeMessageConverter[converters=" + getConverters() + "]";
 	}
 
 }

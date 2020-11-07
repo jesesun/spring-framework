@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,10 @@
 
 package org.springframework.web.socket;
 
+import java.nio.charset.StandardCharsets;
+
+import org.springframework.lang.Nullable;
+
 /**
  * A text WebSocket message.
  *
@@ -24,6 +28,9 @@ package org.springframework.web.socket;
  */
 public final class TextMessage extends AbstractWebSocketMessage<String> {
 
+	@Nullable
+	private final byte[] bytes;
+
 
 	/**
 	 * Create a new text WebSocket message from the given CharSequence payload.
@@ -31,6 +38,17 @@ public final class TextMessage extends AbstractWebSocketMessage<String> {
 	 */
 	public TextMessage(CharSequence payload) {
 		super(payload.toString(), true);
+		this.bytes = null;
+	}
+
+	/**
+	 * Create a new text WebSocket message from the given byte[]. It is assumed
+	 * the byte array can be encoded into an UTF-8 String.
+	 * @param payload the non-null payload
+	 */
+	public TextMessage(byte[] payload) {
+		super(new String(payload, StandardCharsets.UTF_8));
+		this.bytes = payload;
 	}
 
 	/**
@@ -43,17 +61,23 @@ public final class TextMessage extends AbstractWebSocketMessage<String> {
 	 */
 	public TextMessage(CharSequence payload, boolean isLast) {
 		super(payload.toString(), isLast);
+		this.bytes = null;
 	}
 
 
 	@Override
-	protected int getPayloadSize() {
-		return getPayload().length();
+	public int getPayloadLength() {
+		return asBytes().length;
+	}
+
+	public byte[] asBytes() {
+		return (this.bytes != null ? this.bytes : getPayload().getBytes(StandardCharsets.UTF_8));
 	}
 
 	@Override
 	protected String toStringPayload() {
-		return (getPayloadSize() > 10) ? getPayload().substring(0, 10) + ".." : getPayload();
+		String payload = getPayload();
+		return (payload.length() > 10 ? payload.substring(0, 10) + ".." : payload);
 	}
 
 }

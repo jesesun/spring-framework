@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +28,6 @@ import org.springframework.web.socket.handler.PerConnectionWebSocketHandler;
  *
  * @author Rossen Stoyanchev
  * @since 4.0
- *
  * @see HandshakeInterceptor
  * @see org.springframework.web.socket.server.support.WebSocketHttpRequestHandler
  * @see org.springframework.web.socket.sockjs.SockJsService
@@ -42,9 +41,8 @@ public interface HandshakeHandler {
 	 * @param wsHandler the handler to process WebSocket messages; see
 	 * {@link PerConnectionWebSocketHandler} for providing a handler with
 	 * per-connection lifecycle.
-	 * @param attributes handshake request specific attributes to be set on the WebSocket
-	 * session via {@link HandshakeInterceptor} and thus made available to the
-	 * {@link WebSocketHandler};
+	 * @param attributes the attributes from the HTTP handshake to associate with the WebSocket
+	 * session; the provided attributes are copied, the original map is not used.
 	 * @return whether the handshake negotiation was successful or not. In either case the
 	 * response status, headers, and body will have been updated to reflect the
 	 * result of the negotiation

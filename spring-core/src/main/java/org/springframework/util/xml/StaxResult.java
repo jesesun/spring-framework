@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,12 +16,14 @@
 
 package org.springframework.util.xml;
 
-import javax.xml.stream.XMLEventFactory;
 import javax.xml.stream.XMLEventWriter;
 import javax.xml.stream.XMLStreamWriter;
 import javax.xml.transform.sax.SAXResult;
 
 import org.xml.sax.ContentHandler;
+import org.xml.sax.ext.LexicalHandler;
+
+import org.springframework.lang.Nullable;
 
 /**
  * Implementation of the {@code Result} tagging interface for StAX writers. Can be constructed with
@@ -35,7 +37,8 @@ import org.xml.sax.ContentHandler;
  * {@code SAXResult} is <strong>not supported</strong>. In general, the only supported operation
  * on this class is to use the {@code ContentHandler} obtained via {@link #getHandler()} to parse an
  * input source using an {@code XMLReader}. Calling {@link #setHandler(org.xml.sax.ContentHandler)}
- * will result in {@code UnsupportedOperationException}s.
+ * or {@link #setLexicalHandler(org.xml.sax.ext.LexicalHandler)} will result in
+ * {@code UnsupportedOperationException}s.
  *
  * @author Arjen Poutsma
  * @since 3.0
@@ -45,58 +48,57 @@ import org.xml.sax.ContentHandler;
  */
 class StaxResult extends SAXResult {
 
+	@Nullable
 	private XMLEventWriter eventWriter;
 
+	@Nullable
 	private XMLStreamWriter streamWriter;
 
-
-	/**
-	 * Construct a new instance of the {@code StaxResult} with the specified {@code XMLStreamWriter}.
-	 * @param streamWriter the {@code XMLStreamWriter} to write to
-	 */
-	StaxResult(XMLStreamWriter streamWriter) {
-		super.setHandler(new StaxStreamContentHandler(streamWriter));
-		this.streamWriter = streamWriter;
-	}
 
 	/**
 	 * Construct a new instance of the {@code StaxResult} with the specified {@code XMLEventWriter}.
 	 * @param eventWriter the {@code XMLEventWriter} to write to
 	 */
-	StaxResult(XMLEventWriter eventWriter) {
-		super.setHandler(new StaxEventContentHandler(eventWriter));
+	public StaxResult(XMLEventWriter eventWriter) {
+		StaxEventHandler handler = new StaxEventHandler(eventWriter);
+		super.setHandler(handler);
+		super.setLexicalHandler(handler);
 		this.eventWriter = eventWriter;
 	}
 
 	/**
-	 * Construct a new instance of the {@code StaxResult} with the specified {@code XMLEventWriter}
-	 * and {@code XMLEventFactory}.
-	 * @param eventWriter  the {@code XMLEventWriter} to write to
-	 * @param eventFactory the {@code XMLEventFactory} to use for creating events
+	 * Construct a new instance of the {@code StaxResult} with the specified {@code XMLStreamWriter}.
+	 * @param streamWriter the {@code XMLStreamWriter} to write to
 	 */
-	StaxResult(XMLEventWriter eventWriter, XMLEventFactory eventFactory) {
-		super.setHandler(new StaxEventContentHandler(eventWriter, eventFactory));
-		this.eventWriter = eventWriter;
+	public StaxResult(XMLStreamWriter streamWriter) {
+		StaxStreamHandler handler = new StaxStreamHandler(streamWriter);
+		super.setHandler(handler);
+		super.setLexicalHandler(handler);
+		this.streamWriter = streamWriter;
 	}
 
 
 	/**
-	 * Return the {@code XMLEventWriter} used by this {@code StaxResult}. If this {@code StaxResult}
-	 * was created with an {@code XMLStreamWriter}, the result will be {@code null}.
+	 * Return the {@code XMLEventWriter} used by this {@code StaxResult}.
+	 * <p>If this {@code StaxResult} was created with an {@code XMLStreamWriter},
+	 * the result will be {@code null}.
 	 * @return the StAX event writer used by this result
 	 * @see #StaxResult(javax.xml.stream.XMLEventWriter)
 	 */
-	XMLEventWriter getXMLEventWriter() {
+	@Nullable
+	public XMLEventWriter getXMLEventWriter() {
 		return this.eventWriter;
 	}
 
 	/**
-	 * Return the {@code XMLStreamWriter} used by this {@code StaxResult}. If this {@code StaxResult}
-	 * was created with an {@code XMLEventConsumer}, the result will be {@code null}.
+	 * Return the {@code XMLStreamWriter} used by this {@code StaxResult}.
+	 * <p>If this {@code StaxResult} was created with an {@code XMLEventConsumer},
+	 * the result will be {@code null}.
 	 * @return the StAX stream writer used by this result
 	 * @see #StaxResult(javax.xml.stream.XMLStreamWriter)
 	 */
-	XMLStreamWriter getXMLStreamWriter() {
+	@Nullable
+	public XMLStreamWriter getXMLStreamWriter() {
 		return this.streamWriter;
 	}
 
@@ -108,6 +110,15 @@ class StaxResult extends SAXResult {
 	@Override
 	public void setHandler(ContentHandler handler) {
 		throw new UnsupportedOperationException("setHandler is not supported");
+	}
+
+	/**
+	 * Throws an {@code UnsupportedOperationException}.
+	 * @throws UnsupportedOperationException always
+	 */
+	@Override
+	public void setLexicalHandler(LexicalHandler handler) {
+		throw new UnsupportedOperationException("setLexicalHandler is not supported");
 	}
 
 }

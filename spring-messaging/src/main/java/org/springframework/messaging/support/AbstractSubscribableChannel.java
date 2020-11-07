@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +15,10 @@
  */
 
 package org.springframework.messaging.support;
+
+import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 import org.springframework.messaging.MessageHandler;
 import org.springframework.messaging.SubscribableChannel;
@@ -27,40 +31,37 @@ import org.springframework.messaging.SubscribableChannel;
  */
 public abstract class AbstractSubscribableChannel extends AbstractMessageChannel implements SubscribableChannel {
 
-	@Override
-	public final boolean subscribe(MessageHandler handler) {
-		if (hasSubscription(handler)) {
-			logger.warn("[" + getBeanName() + "] handler already subscribed " + handler);
-			return false;
-		}
-		if (logger.isDebugEnabled()) {
-			logger.debug("[" + getBeanName() + "] subscribing " + handler);
-		}
-		return subscribeInternal(handler);
+	private final Set<MessageHandler> handlers = new CopyOnWriteArraySet<>();
+
+
+	public Set<MessageHandler> getSubscribers() {
+		return Collections.<MessageHandler>unmodifiableSet(this.handlers);
+	}
+
+	public boolean hasSubscription(MessageHandler handler) {
+		return this.handlers.contains(handler);
 	}
 
 	@Override
-	public final boolean unsubscribe(MessageHandler handler) {
-		if (logger.isDebugEnabled()) {
-			logger.debug("[" + getBeanName() + "] unsubscribing " + handler);
+	public boolean subscribe(MessageHandler handler) {
+		boolean result = this.handlers.add(handler);
+		if (result) {
+			if (logger.isDebugEnabled()) {
+				logger.debug(getBeanName() + " added " + handler);
+			}
 		}
-		return unsubscribeInternal(handler);
+		return result;
 	}
 
-
-	/**
-	 * Whether the given {@link MessageHandler} is already subscribed.
-	 */
-	public abstract boolean hasSubscription(MessageHandler handler);
-
-	/**
-	 * Subscribe the given {@link MessageHandler}.
-	 */
-	protected abstract boolean subscribeInternal(MessageHandler handler);
-
-	/**
-	 * Unsubscribe the given {@link MessageHandler}.
-	 */
-	protected abstract boolean unsubscribeInternal(MessageHandler handler);
+	@Override
+	public boolean unsubscribe(MessageHandler handler) {
+		boolean result = this.handlers.remove(handler);
+		if (result) {
+			if (logger.isDebugEnabled()) {
+				logger.debug(getBeanName() + " removed " + handler);
+			}
+		}
+		return result;
+	}
 
 }

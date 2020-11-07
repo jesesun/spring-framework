@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,140 +16,260 @@
 
 package org.springframework.messaging.support;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.lang.Nullable;
 import org.springframework.messaging.Message;
+import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.util.ObjectUtils;
 
 /**
- * An extension of {@link MessageHeaderAccessor} that also stores and provides read/write
- * access to message headers from an external source -- e.g. a Spring {@link Message}
- * created to represent a STOMP message received from a STOMP client or message broker.
- * Native message headers are kept in a {@link MultiValueMap} under the key
- * {@link #NATIVE_HEADERS}.
- * <p>
- * This class is not intended for direct use but is rather expected to be consumed
- * through sub-classes such as
- * {@link org.springframework.messaging.simp.stomp.StompHeaderAccessor StompHeaderAccessor}.
- * Such sub-classes may provide factory methods to translate message headers from
- * an external messaging source (e.g. STOMP) to Spring {@link Message} headers and
- * reversely to translate Spring {@link Message} headers to a message to send to an
- * external source.
+ * {@link MessageHeaderAccessor} sub-class that supports storage and access of
+ * headers from an external source such as a message broker. Headers from the
+ * external source are kept separate from other headers, in a sub-map under the
+ * key {@link #NATIVE_HEADERS}. This allows separating processing headers from
+ * headers that need to be sent to or received from the external source.
+ *
+ * <p>This class is likely to be used through indirectly through a protocol
+ * specific sub-class that also provide factory methods to translate
+ * message headers to an from an external messaging source.
  *
  * @author Rossen Stoyanchev
  * @since 4.0
  */
 public class NativeMessageHeaderAccessor extends MessageHeaderAccessor {
 
+	/** The header name used to store native headers. */
 	public static final String NATIVE_HEADERS = "nativeHeaders";
 
 
-	// wrapped native headers
-	private final Map<String, List<String>> originalNativeHeaders;
-
-	// native header updates
-	private final MultiValueMap<String, String> nativeHeaders = new LinkedMultiValueMap<String, String>(4);
-
-
 	/**
-	 * A constructor for creating new headers, accepting an optional native header map.
+	 * Protected constructor to create a new instance.
 	 */
-	protected NativeMessageHeaderAccessor(Map<String, List<String>> nativeHeaders) {
-		this.originalNativeHeaders = nativeHeaders;
+	protected NativeMessageHeaderAccessor() {
+		this((Map<String, List<String>>) null);
 	}
 
 	/**
-	 * A constructor for accessing and modifying existing message headers.
+	 * Protected constructor to create an instance with the given native headers.
+	 * @param nativeHeaders native headers to create the message with (may be {@code null})
 	 */
-	protected NativeMessageHeaderAccessor(Message<?> message) {
+	protected NativeMessageHeaderAccessor(@Nullable Map<String, List<String>> nativeHeaders) {
+		if (!CollectionUtils.isEmpty(nativeHeaders)) {
+			setHeader(NATIVE_HEADERS, new LinkedMultiValueMap<>(nativeHeaders));
+		}
+	}
+
+	/**
+	 * Protected constructor that copies headers from another message.
+	 */
+	protected NativeMessageHeaderAccessor(@Nullable Message<?> message) {
 		super(message);
-		this.originalNativeHeaders = initNativeHeaders(message);
-	}
-
-	private static Map<String, List<String>> initNativeHeaders(Message<?> message) {
 		if (message != null) {
 			@SuppressWarnings("unchecked")
-			Map<String, List<String>> headers = (Map<String, List<String>>) message.getHeaders().get(NATIVE_HEADERS);
-			if (headers != null) {
-				return headers;
+			Map<String, List<String>> map = (Map<String, List<String>>) getHeader(NATIVE_HEADERS);
+			if (map != null) {
+				setHeader(NATIVE_HEADERS, new LinkedMultiValueMap<>(map));
 			}
 		}
-		return null;
 	}
 
-	@Override
-	public Map<String, Object> toMap() {
-		Map<String, Object> result = super.toMap();
-		result.put(NATIVE_HEADERS, toNativeHeaderMap());
-		return result;
-	}
 
-	@Override
-	public boolean isModified() {
-		return (super.isModified() || (!this.nativeHeaders.isEmpty()));
+	/**
+	 * Subclasses can use this method to access the "native" headers sub-map.
+	 */
+	@SuppressWarnings("unchecked")
+	@Nullable
+	protected Map<String, List<String>> getNativeHeaders() {
+		return (Map<String, List<String>>) getHeader(NATIVE_HEADERS);
 	}
 
 	/**
-	 * Return a map with native headers including original, wrapped headers (if any) plus
-	 * additional header updates made through accessor methods.
+	 * Return a copy of the native headers sub-map, or an empty map.
 	 */
 	public Map<String, List<String>> toNativeHeaderMap() {
-		Map<String, List<String>> result = new HashMap<String, List<String>>();
-		if (this.originalNativeHeaders != null) {
-			result.putAll(this.originalNativeHeaders);
-		}
-		for (String key : this.nativeHeaders.keySet()) {
-			List<String> value = this.nativeHeaders.get(key);
-			if (value == null) {
-				result.remove(key);
+		Map<String, List<String>> map = getNativeHeaders();
+		return (map != null ? new LinkedMultiValueMap<>(map) : Collections.emptyMap());
+	}
+
+	@Override
+	public void setImmutable() {
+		if (isMutable()) {
+			Map<String, List<String>> map = getNativeHeaders();
+			if (map != null) {
+				setHeader(NATIVE_HEADERS, Collections.unmodifiableMap(map));
 			}
-			else {
-				result.put(key, value);
-			}
+			super.setImmutable();
 		}
-		return result;
+	}
+
+	@Override
+	public void setHeader(String name, @Nullable Object value) {
+		if (name.equalsIgnoreCase(NATIVE_HEADERS)) {
+			// Force removal since setHeader checks for equality
+			super.setHeader(NATIVE_HEADERS, null);
+		}
+		super.setHeader(name, value);
+	}
+
+	@Override
+	@SuppressWarnings("unchecked")
+	public void copyHeaders(@Nullable Map<String, ?> headersToCopy) {
+		if (headersToCopy != null) {
+			Map<String, List<String>> nativeHeaders = getNativeHeaders();
+			Map<String, List<String>> map = (Map<String, List<String>>) headersToCopy.get(NATIVE_HEADERS);
+			if (map != null) {
+				if (nativeHeaders != null) {
+					nativeHeaders.putAll(map);
+				}
+				else {
+					nativeHeaders = new LinkedMultiValueMap<>(map);
+				}
+			}
+			super.copyHeaders(headersToCopy);
+			setHeader(NATIVE_HEADERS, nativeHeaders);
+		}
 	}
 
 	/**
-	 * Return all values for the specified native header or {@code null}.
+	 * Whether the native header map contains the give header name.
+	 * @param headerName the name of the header
 	 */
+	public boolean containsNativeHeader(String headerName) {
+		Map<String, List<String>> map = getNativeHeaders();
+		return (map != null && map.containsKey(headerName));
+	}
+
+	/**
+	 * Return all values for the specified native header, if present.
+	 * @param headerName the name of the header
+	 * @return the associated values, or {@code null} if none
+	 */
+	@Nullable
 	public List<String> getNativeHeader(String headerName) {
-		if (this.nativeHeaders.containsKey(headerName)) {
-			return this.nativeHeaders.get(headerName);
-		}
-		else if (this.originalNativeHeaders != null) {
-			return this.originalNativeHeaders.get(headerName);
+		Map<String, List<String>> map = getNativeHeaders();
+		return (map != null ? map.get(headerName) : null);
+	}
+
+	/**
+	 * Return the first value for the specified native header, if present.
+	 * @param headerName the name of the header
+	 * @return the associated value, or {@code null} if none
+	 */
+	@Nullable
+	public String getFirstNativeHeader(String headerName) {
+		Map<String, List<String>> map = getNativeHeaders();
+		if (map != null) {
+			List<String> values = map.get(headerName);
+			if (!CollectionUtils.isEmpty(values)) {
+				return values.get(0);
+			}
 		}
 		return null;
 	}
 
 	/**
-	 * Return the first value for the specified native header of {@code null}.
+	 * Set the specified native header value replacing existing values.
+	 * <p>In order for this to work, the accessor must be {@link #isMutable()
+	 * mutable}. See {@link MessageHeaderAccessor} for details.
 	 */
-	public String getFirstNativeHeader(String headerName) {
-		List<String> values = getNativeHeader(headerName);
-		return CollectionUtils.isEmpty(values) ? null : values.get(0);
-	}
-
-	/**
-	 * Set the specified native header value.
-	 */
-	public void setNativeHeader(String name, String value) {
-		if (!ObjectUtils.nullSafeEquals(value, getHeader(name))) {
-			this.nativeHeaders.set(name, value);
+	public void setNativeHeader(String name, @Nullable String value) {
+		Assert.state(isMutable(), "Already immutable");
+		Map<String, List<String>> map = getNativeHeaders();
+		if (value == null) {
+			if (map != null && map.get(name) != null) {
+				setModified(true);
+				map.remove(name);
+			}
+			return;
+		}
+		if (map == null) {
+			map = new LinkedMultiValueMap<>(3);
+			setHeader(NATIVE_HEADERS, map);
+		}
+		List<String> values = new ArrayList<>(1);
+		values.add(value);
+		if (!ObjectUtils.nullSafeEquals(values, getHeader(name))) {
+			setModified(true);
+			map.put(name, values);
 		}
 	}
 
 	/**
-	 * Add the specified native header value.
+	 * Add the specified native header value to existing values.
+	 * <p>In order for this to work, the accessor must be {@link #isMutable()
+	 * mutable}. See {@link MessageHeaderAccessor} for details.
+	 * @param name the name of the header
+	 * @param value the header value to set
 	 */
-	public void addNativeHeader(String name, String value) {
-		this.nativeHeaders.add(name, value);
+	public void addNativeHeader(String name, @Nullable String value) {
+		Assert.state(isMutable(), "Already immutable");
+		if (value == null) {
+			return;
+		}
+		Map<String, List<String>> nativeHeaders = getNativeHeaders();
+		if (nativeHeaders == null) {
+			nativeHeaders = new LinkedMultiValueMap<>(3);
+			setHeader(NATIVE_HEADERS, nativeHeaders);
+		}
+		List<String> values = nativeHeaders.computeIfAbsent(name, k -> new ArrayList<>(1));
+		values.add(value);
+		setModified(true);
+	}
+
+	/**
+	 * Add the specified native headers to existing values.
+	 * @param headers the headers to set
+	 */
+	public void addNativeHeaders(@Nullable MultiValueMap<String, String> headers) {
+		if (headers == null) {
+			return;
+		}
+		headers.forEach((key, values) -> values.forEach(value -> addNativeHeader(key, value)));
+	}
+
+	/**
+	 * Remove the specified native header value replacing existing values.
+	 * <p>In order for this to work, the accessor must be {@link #isMutable()
+	 * mutable}. See {@link MessageHeaderAccessor} for details.
+	 * @param headerName the name of the header
+	 * @return the associated values, or {@code null} if the header was not present
+	 */
+	@Nullable
+	public List<String> removeNativeHeader(String headerName) {
+		Assert.state(isMutable(), "Already immutable");
+		Map<String, List<String>> nativeHeaders = getNativeHeaders();
+		if (CollectionUtils.isEmpty(nativeHeaders)) {
+			return null;
+		}
+		return nativeHeaders.remove(headerName);
+	}
+
+
+	/**
+	 * Return the first value for the specified native header,
+	 * or {@code null} if none.
+	 * @param headerName the name of the header
+	 * @param headers the headers map to introspect
+	 * @return the associated value, or {@code null} if none
+	 */
+	@SuppressWarnings("unchecked")
+	@Nullable
+	public static String getFirstNativeHeader(String headerName, Map<String, Object> headers) {
+		Map<String, List<String>> map = (Map<String, List<String>>) headers.get(NATIVE_HEADERS);
+		if (map != null) {
+			List<String> values = map.get(headerName);
+			if (!CollectionUtils.isEmpty(values)) {
+				return values.get(0);
+			}
+		}
+		return null;
 	}
 
 }
